@@ -1,8 +1,9 @@
 # b3d_opti_tools
 
-Offline utilities for `.b3d` model assets. Python 3; `pip install numpy Pillow`
-covers everything (the strip/rotate CLIs are standard-library only, the
-decimator and viewer need numpy, the viewer also needs Pillow + tkinter).
+Offline utilities for `.b3d` model assets. Python 3; `pip install -r
+requirements.txt` covers everything (the strip/rotate CLIs are
+standard-library only, the decimator and viewers need numpy, the two viewers
+also need Pillow + tkinter).
 
 | file | what |
 |---|---|
@@ -10,6 +11,7 @@ decimator and viewer need numpy, the viewer also needs Pillow + tkinter).
 | `b3d_decimate_keys.py`  | thin out redundant animation keyframes — **lossy but measured** |
 | `b3d_rotate_normals.py` | rotate per-vertex normals to fix "shading looks rotated" — **lossless for 90°-multiples** |
 | `b3d_shading_viewer.py` | pop up a window (or export a PNG) comparing a model's shading before/after a fix |
+| `b3d_rotate_normals_with_gui.py` | `b3d_rotate_normals.py` + the viewer above in one window — Axis/Deg fields and Report/Save buttons, rotate *and save* without a CLI round-trip |
 | `b3dlib.py`             | shared reader + forward-kinematics/skinning/render-mesh helper (imported by the others) |
 
 The editing tools (strip/decimate/rotate) rewrite only what they need to and
@@ -118,7 +120,8 @@ wrong hemisphere entirely (dot product < 0) before the fix; mean fit +0.308 ->
 +1.000 (988/988 vertices exact) after `--axis x --deg -90`.
 
 Use `b3d_shading_viewer.py` (below) to eyeball a candidate rotation before
-committing to it.
+committing to it, or `b3d_rotate_normals_with_gui.py` to do both from one
+window instead of switching back and forth with this CLI.
 
 ---
 
@@ -150,6 +153,46 @@ This is a flat-shaded, painter's-algorithm software rasterizer (no z-buffer,
 no Gouraud smoothing, nearest-neighbour texture sampling averaged per
 triangle-corner to dodge UV-seam bleed) — it exists to answer one question in
 seconds, not to replace looking at the real model in-game.
+
+---
+
+## b3d_rotate_normals_with_gui.py
+
+`b3d_rotate_normals.py`'s rotate-and-save plus `b3d_shading_viewer.py`'s
+preview, in one window — no more re-running a CLI command for every
+candidate angle.
+
+```
+python b3d_rotate_normals_with_gui.py model.b3d
+python b3d_rotate_normals_with_gui.py model.b3d --axis x --deg -90
+python b3d_rotate_normals_with_gui.py model.b3d --texture cars_wooden_car.png
+```
+
+Left panel is the file on disk ("BEFORE"); right panel is the same model with
+its normals rotated by the **Axis** / **Deg** fields, recomputed in memory as
+you change them ("AFTER") — nothing touches disk until you click a Save
+button. `[-90] [90] [180]` are quick presets for the exact, lossless
+rotations; **Preview** (or Enter in the Deg field, or picking an axis)
+recomputes the right panel from whatever's currently typed.
+
+* **Report** — the same 9-candidate geometric-fit table as `b3d_rotate_normals.py
+  --report`, printed into the log pane at the bottom.
+* **Use best** — fills Axis/Deg from the best candidate the last Report found.
+* **Save As...** — writes BEFORE, rotated by the current Axis/Deg, to a new
+  file you pick. Goes through `b3d_rotate_normals.rotate()` itself (same
+  verified byte-patching as the CLI), so the result is identical to running
+  the CLI tool by hand.
+* **Save In-Place** — overwrites the loaded file, after a confirmation
+  dialog. Afterwards BEFORE is reloaded from disk and Deg resets to `0`, so
+  the two panels agree and clicking Save again is a no-op instead of
+  double-rotating an already-fixed file.
+* **Open Model...** — load a different `.b3d` without restarting the script.
+
+View controls are the same as the plain viewer: drag (over the image) to
+orbit, wheel (over the image) to zoom, **T** to toggle texture (pass
+`--texture` at startup to have one to toggle), **R** to reset the view,
+**Esc** to quit — all guarded to ignore T/R while you're typing in the Deg
+field.
 
 ---
 

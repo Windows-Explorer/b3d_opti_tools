@@ -1,0 +1,13 @@
+# b3d_opti_tools dependencies
+#
+# b3d_strip_weights.py and b3d_rotate_normals.py need nothing beyond the
+# standard library -- this file is only for the decimator and the two
+# viewers (b3d_decimate_keys.py, b3d_shading_viewer.py,
+# b3d_rotate_normals_with_gui.py), via b3dlib.py.
+numpy>=1.24
+Pillow>=9.0
+
+# The two viewers also need tkinter for their window. It ships with the
+# standard python.org Windows/macOS installers, so there is nothing to add
+# here for those -- but it's a separate OS package on most Linux distros
+# (e.g. `sudo apt install python3-tk`), since pip cannot install it.
