@@ -206,3 +206,73 @@ def skinned_vertices(nodes, verts, owner, f, BWi):
         vh = np.c_[verts[vids], np.ones(len(vids))]
         out[vids] = (vh @ S.T)[:, :3]
     return out
+
+
+# ------------------------------------------------------- full render mesh
+
+def load_render_mesh(path):
+    """Read every MESH in a .b3d as flat numpy arrays for rendering/inspection:
+    positions Nx3, normals Nx3 (or None if the file has none), first-channel
+    UVs Nx2 (zero-filled where absent), triangle indices Mx3 (re-based to be
+    global across all meshes concatenated). Local space, no node transforms
+    applied -- matches what MultiCraft's shader shades from (see
+    b3d_rotate_normals.directional_ambient). Unlike parse()/walk() above this
+    keeps every mesh, not just the first, and reads UVs; used by
+    b3d_shading_viewer.py.
+    """
+    data = open(path, "rb").read()
+    if data[:4] != b"BB3D":
+        raise ValueError("not a B3D file: " + path)
+    Ps, Ns, UVs, Ts = [], [], [], []
+    base = [0]
+    any_normals = [False]
+
+    def node_prefix_len(body):
+        s = body
+        while data[s] != 0:
+            s += 1
+        return (s + 1 - body) + 40
+
+    def walk(p, limit):
+        while p + 8 <= limit:
+            tag = data[p:p + 4]
+            (sz,) = struct.unpack_from("<i", data, p + 4)
+            b0, b1 = p + 8, p + 8 + sz
+            if tag == b"NODE":
+                walk(b0 + node_prefix_len(b0), b1)
+            elif tag in (b"BB3D", b"MESH"):
+                walk(b0 + 4, b1)
+            elif tag == b"VRTS":
+                flags, tcs, tcz = struct.unpack_from("<3i", data, b0)
+                has_n = bool(flags & 1)
+                stride = 3 + (3 if has_n else 0) + (4 if flags & 2 else 0) + tcs * tcz
+                nv = (sz - 12) // stride // 4
+                P = np.empty((nv, 3)); N = np.zeros((nv, 3)); UV = np.zeros((nv, 2))
+                uv_off = 3 + (3 if has_n else 0) + (4 if flags & 2 else 0)
+                for i in range(nv):
+                    o = b0 + 12 + i * stride * 4
+                    P[i] = struct.unpack_from("<3f", data, o)
+                    if has_n:
+                        N[i] = struct.unpack_from("<3f", data, o + 12)
+                    if tcs * tcz >= 2:
+                        UV[i] = struct.unpack_from("<2f", data, o + uv_off * 4)
+                Ps.append(P); Ns.append(N if has_n else None); UVs.append(UV)
+                any_normals[0] = any_normals[0] or has_n
+                base.append(base[-1] + nv)
+            elif tag == b"TRIS":
+                nt = (sz - 4) // 12
+                T = np.empty((nt, 3), dtype=int)
+                for i in range(nt):
+                    T[i] = struct.unpack_from("<3i", data, b0 + 4 + i * 12)
+                Ts.append(T + base[-2] if len(base) >= 2 else T)
+            p = b1
+
+    walk(12, len(data))
+    if not Ps:
+        raise ValueError("no VRTS mesh found in " + path)
+    P = np.concatenate(Ps)
+    UV = np.concatenate(UVs)
+    N = np.concatenate([n if n is not None else np.zeros((len(Ps[i]), 3))
+                         for i, n in enumerate(Ns)]) if any_normals[0] else None
+    T = np.concatenate(Ts) if Ts else np.zeros((0, 3), dtype=int)
+    return P, N, UV, T
